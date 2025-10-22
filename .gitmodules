@@ -1,3 +1,12 @@
 [submodule "Shopyverse_front"]
 	path = Shopyverse_front
 	url = https://github.com/antmanho/Shopyverse_front
+[submodule "shopyverse-api-core"]
+	path = shopyverse-api-core
+	url = https://github.com/AlexisChartier/shopyverse-api-core
+[submodule "shopyverse-reco-service"]
+	path = shopyverse-reco-service
+	url = https://github.com/AlexisChartier/shopyverse-reco-service
+[submodule "shopyverse-chatbot-service"]
+	path = shopyverse-chatbot-service
+	url = https://github.com/AlexisChartier/shopyverse-chatbot-service
