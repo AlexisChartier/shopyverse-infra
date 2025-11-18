@@ -13,12 +13,12 @@ jobs:
         uses: trstringer/manual-approval@v1
         with:
           secret: ${{ secrets.GITHUB_TOKEN }}
-          approvers: ${{ secrets.PROD_APPROVERS }} # Noms des approbateurs séparés par virgules
-          minimum-approvals: 1 
+          [cite_start]approvers: ${{ secrets.PROD_APPROVERS }} # Noms des approbateurs séparés par virgules [cite: 378]
+          [cite_start]minimum-approvals: 1 [cite: 379]
 
   # Job 2: Déploiement (se lance APRÈS validation)
   deploy:
-    needs: wait-approval # Dépend du succès de l'approbation
+    [cite_start]needs: wait-approval # Dépend du succès de l'approbation [cite: 381]
     runs-on: ubuntu-latest
     env:
       REGISTRY: ${{ secrets.REGISTRY_URL }}
@@ -50,7 +50,7 @@ jobs:
         with:
           context: services/frontend
           file: services/frontend/Dockerfile
-          push: true 
+          push: true
           tags: ${{ env.REGISTRY }}/shopyverse-frontend:${{ env.IMAGE_TAG }}
 
       - name: Build & Push API Core
@@ -58,7 +58,7 @@ jobs:
         with:
           context: services/api-core
           file: services/api-core/Dockerfile
-          push: true 
+          push: true
           tags: ${{ env.REGISTRY }}/shopyverse-api-core:${{ env.IMAGE_TAG }}
           
       - name: Build & Push Reco Service
@@ -66,27 +66,28 @@ jobs:
         with:
           context: services/reco-service
           file: services/reco-service/Dockerfile
-          push: true 
+          push: true
           tags: ${{ env.REGISTRY }}/shopyverse-reco-service:${{ env.IMAGE_TAG }}
 
-      - name: Build & Push 💬 Chatbot Service
+      - name: Build & Push Chatbot Service
         uses: docker/build-push-action@v6
         with:
           context: services/chatbot-service
           file: services/chatbot-service/Dockerfile
-          push: true 
+          push: true
           tags: ${{ env.REGISTRY }}/shopyverse-chatbot-service:${{ env.IMAGE_TAG }}
       
       # --- DÉPLOIEMENT KUBERNETES VIA HELM ---
 
-      # 4. Setup Kubeconfig (Production)
+      # 4. Setup Kubeconfig (Production) - Utilisation du Base64
       - uses: azure/setup-kubectl@v4
-      - name: Kubeconfig Setup (Production)
+      - name: Kubeconfig Setup (Production) - DECODAGE BASE64
         run: |
           mkdir -p ~/.kube
-          echo "${KUBECONFIG_FILE}" > ~/.kube/config
+          # Décodage du secret Base64 et écriture dans le fichier
+          echo "${KUBECONFIG_B64}" | base64 -d > ~/.kube/config
         env:
-          KUBECONFIG_FILE: ${{ secrets.KUBECONFIG_PROD }}
+          KUBECONFIG_B64: ${{ secrets.KUBECONFIG_PROD_B64 }}
 
       # 5. Déploiement via Helm Upgrade
       - name: Render Helm values
@@ -96,23 +97,22 @@ jobs:
             registry: ${REGISTRY}
             namespace: ${NAMESPACE}
             tags:
-              apiCore: latest
-              reco: latest
-              chatbot: latest
+              [cite_start]apiCore: latest [cite: 401]
+              [cite_start]reco: latest [cite: 402]
+              [cite_start]chatbot: latest [cite: 403]
               frontend: latest
           EOF
       - name: Helm upgrade to Production
         run: |
           helm upgrade --install shopyverse ./helm \
             --namespace ${NAMESPACE} --create-namespace \
-            -f ./helm/values.yaml -f values.override.yaml
+            [cite_start]-f ./helm/values.yaml -f values.override.yaml [cite: 407-409]
             
       # 6. Finalisation : Smoke Tests et Tag de Release
       - name: Smoke tests
-        run: ./scripts/smoke.sh
+        [cite_start]run: ./scripts/smoke.sh [cite: 411]
       - name: Tag release
         run: |
-          # Crée un tag du type v2025.11.18-7a5d9e1 pour la traçabilité
           VERSION=v$(date +'%Y.%m.%d')-${GITHUB_SHA::7}
           git tag -a "$VERSION" -m "Deploy to prod"
-          git push origin "$VERSION"
+          [cite_start]git push origin "$VERSION" [cite: 413-416]
