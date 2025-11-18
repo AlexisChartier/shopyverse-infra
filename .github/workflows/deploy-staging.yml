@@ -20,7 +20,7 @@ jobs:
           submodules: recursive
           token: ${{ secrets.GITHUB_TOKEN }}
           
-      # 2. Authentification au Registre Docker (Pour le Push)
+      # 2. Authentification au Registre Docker
       - name: Login to Container Registry
         uses: docker/login-action@v3
         with:
@@ -32,7 +32,7 @@ jobs:
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build & Push 🌐 Frontend
+      - name: Build & Push Frontend
         uses: docker/build-push-action@v6
         with:
           context: services/frontend
@@ -40,7 +40,7 @@ jobs:
           push: true
           tags: ${{ env.REGISTRY }}/shopyverse-frontend:${{ env.IMAGE_TAG }}
 
-      - name: Build & Push 🖥️ API Core
+      - name: Build & Push API Core
         uses: docker/build-push-action@v6
         with:
           context: services/api-core
@@ -48,7 +48,7 @@ jobs:
           push: true
           tags: ${{ env.REGISTRY }}/shopyverse-api-core:${{ env.IMAGE_TAG }}
           
-      - name: Build & Push 🤖 Reco Service
+      - name: Build & Push Reco Service
         uses: docker/build-push-action@v6
         with:
           context: services/reco-service
@@ -56,25 +56,26 @@ jobs:
           push: true
           tags: ${{ env.REGISTRY }}/shopyverse-reco-service:${{ env.IMAGE_TAG }}
 
-      - name: Build & Push 💬 Chatbot Service
+      - name: Build & Push Chatbot Service
         uses: docker/build-push-action@v6
         with:
           context: services/chatbot-service
           file: services/chatbot-service/Dockerfile
           push: true
           tags: ${{ env.REGISTRY }}/shopyverse-chatbot-service:${{ env.IMAGE_TAG }}
-
+      
       # --- DÉPLOIEMENT KUBERNETES VIA HELM ---
       
-      # 4. Setup Kubeconfig (Staging)
+      # 4. Setup Kubeconfig (Staging) - Utilisation du Base64
       - name: Setup kubectl
-        uses: azure/setup-kubectl@v4
-      - name: Kubeconfig Setup (Staging)
+        [cite_start]uses: azure/setup-kubectl@v4 [cite: 329]
+      - name: Kubeconfig Setup (Staging) - DECODAGE BASE64
         run: |
           mkdir -p ~/.kube
-          echo "${KUBECONFIG_FILE}" > ~/.kube/config 
+          # Décodage du secret Base64 et écriture dans le fichier
+          echo "${KUBECONFIG_B64}" | base64 -d > ~/.kube/config 
         env:
-          KUBECONFIG_FILE: ${{ secrets.KUBECONFIG_STAGING }}
+          KUBECONFIG_B64: ${{ secrets.KUBECONFIG_STAGING_B64 }}
 
       # 5. Déploiement via Helm Upgrade
       - name: Render Helm values
@@ -93,8 +94,8 @@ jobs:
         run: |
           helm upgrade --install shopyverse ./helm \
             --namespace ${NAMESPACE} --create-namespace \
-            -f ./helm/values.yaml -f values.override.yaml
+            [cite_start]-f ./helm/values.yaml -f values.override.yaml [cite: 351-353]
             
       # 6. Exécution des Smoke Tests
       - name: Run smoke tests
-        run: ./scripts/smoke.sh
+        [cite_start]run: ./scripts/smoke.sh [cite: 355-356]
