@@ -1,0 +1,118 @@
+name: CD - Production Deployment (Main)
+
+on:
+  push:
+    branches: [ "main" ] # Déclencheur : Push sur 'main'
+
+jobs:
+  # Job 1: Attente de l'Approbation Manuelle
+  wait-approval:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Await manual approval
+        uses: trstringer/manual-approval@v1
+        with:
+          secret: ${{ secrets.GITHUB_TOKEN }}
+          approvers: ${{ secrets.PROD_APPROVERS }} # Noms des approbateurs séparés par virgules
+          minimum-approvals: 1 
+
+  # Job 2: Déploiement (se lance APRÈS validation)
+  deploy:
+    needs: wait-approval # Dépend du succès de l'approbation
+    runs-on: ubuntu-latest
+    env:
+      REGISTRY: ${{ secrets.REGISTRY_URL }}
+      NAMESPACE: shopyverse
+      IMAGE_TAG: latest # Tag standard pour la Production
+
+    steps:
+      # 1. Checkout du code ET des Submodules
+      - name: Checkout Code with Submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.GITHUB_TOKEN }}
+          
+      # 2. Authentification au Registre Docker
+      - name: Login to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_REGISTRY_USER }}
+          password: ${{ secrets.DOCKER_REGISTRY_PASSWORD }}
+
+      # 3. Build & Push des 4 services (avec tag 'latest')
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & Push Frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: services/frontend
+          file: services/frontend/Dockerfile
+          push: true 
+          tags: ${{ env.REGISTRY }}/shopyverse-frontend:${{ env.IMAGE_TAG }}
+
+      - name: Build & Push API Core
+        uses: docker/build-push-action@v6
+        with:
+          context: services/api-core
+          file: services/api-core/Dockerfile
+          push: true 
+          tags: ${{ env.REGISTRY }}/shopyverse-api-core:${{ env.IMAGE_TAG }}
+          
+      - name: Build & Push Reco Service
+        uses: docker/build-push-action@v6
+        with:
+          context: services/reco-service
+          file: services/reco-service/Dockerfile
+          push: true 
+          tags: ${{ env.REGISTRY }}/shopyverse-reco-service:${{ env.IMAGE_TAG }}
+
+      - name: Build & Push 💬 Chatbot Service
+        uses: docker/build-push-action@v6
+        with:
+          context: services/chatbot-service
+          file: services/chatbot-service/Dockerfile
+          push: true 
+          tags: ${{ env.REGISTRY }}/shopyverse-chatbot-service:${{ env.IMAGE_TAG }}
+      
+      # --- DÉPLOIEMENT KUBERNETES VIA HELM ---
+
+      # 4. Setup Kubeconfig (Production)
+      - uses: azure/setup-kubectl@v4
+      - name: Kubeconfig Setup (Production)
+        run: |
+          mkdir -p ~/.kube
+          echo "${KUBECONFIG_FILE}" > ~/.kube/config
+        env:
+          KUBECONFIG_FILE: ${{ secrets.KUBECONFIG_PROD }}
+
+      # 5. Déploiement via Helm Upgrade
+      - name: Render Helm values
+        run: |
+          cat > values.override.yaml <<EOF
+          image:
+            registry: ${REGISTRY}
+            namespace: ${NAMESPACE}
+            tags:
+              apiCore: latest
+              reco: latest
+              chatbot: latest
+              frontend: latest
+          EOF
+      - name: Helm upgrade to Production
+        run: |
+          helm upgrade --install shopyverse ./helm \
+            --namespace ${NAMESPACE} --create-namespace \
+            -f ./helm/values.yaml -f values.override.yaml
+            
+      # 6. Finalisation : Smoke Tests et Tag de Release
+      - name: Smoke tests
+        run: ./scripts/smoke.sh
+      - name: Tag release
+        run: |
+          # Crée un tag du type v2025.11.18-7a5d9e1 pour la traçabilité
+          VERSION=v$(date +'%Y.%m.%d')-${GITHUB_SHA::7}
+          git tag -a "$VERSION" -m "Deploy to prod"
+          git push origin "$VERSION"
