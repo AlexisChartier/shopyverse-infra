@@ -1,0 +1,71 @@
+name: Infra CI (Validation & Linting)
+
+on:
+  pull_request:
+    branches: [ "develop" ] # Se lance avant le merge dans 'develop'
+
+jobs:
+  validate-and-smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Checkout du code ET des Submodules
+      - name: Checkout Code with Submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive # Accès aux services enfants
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # 2. Setup des outils et Linting des configurations d'Infrastructure (IaC)
+      - name: Setup Tools & Linting
+        run: |
+          # Installation des outils de validation de fichiers de configuration
+          sudo apt-get update && sudo apt-get install -y yamllint
+          yamllint .github/workflows/*.yml
+          yamllint helm/*.yaml 
+
+      # 3. Validation des Charts Helm (K8s)
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+
+      - name: Helm Lint and Template Check
+        run: |
+          # S'assure que les manifests Helm sont corrects syntaxiquement
+          helm lint ./helm
+          helm template shopyverse ./helm --dry-run 
+
+      # 4. Smoke Test : Tente de construire les images (Build seulement)
+      # On vérifie ici que le Dockerfile de chaque submodule fonctionne.
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        
+      - name: Build Docker Frontend (Smoke Test)
+        uses: docker/build-push-action@v6
+        with:
+          context: services/frontend
+          file: services/frontend/Dockerfile
+          push: false 
+          tags: test/frontend:ci
+          
+      - name: Build Docker API Core (Smoke Test)
+        uses: docker/build-push-action@v6
+        with:
+          context: services/api-core
+          file: services/api-core/Dockerfile
+          push: false 
+          tags: test/api-core:ci
+
+      - name: Build Docker Reco Service (Smoke Test)
+        uses: docker/build-push-action@v6
+        with:
+          context: services/reco-service
+          file: services/reco-service/Dockerfile
+          push: false 
+          tags: test/reco-service:ci
+
+      - name: Build Docker Chatbot Service (Smoke Test)
+        uses: docker/build-push-action@v6
+        with:
+          context: services/chatbot-service
+          file: services/chatbot-service/Dockerfile
+          push: false 
+          tags: test/chatbot-service:ci
